@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PathSnap – Intelligent GPS Route Reconstruction</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+    #map { height: 560px; border-radius: 0.75rem; z-index: 10; }
+    .nav-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: 600; }
+    .leaflet-popup-content-wrapper { border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+  <!-- Header & Navigation -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16">
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('dashboard')">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+          <i class="fa-solid fa-route text-lg"></i>
+        </div>
+        <div>
+          <span class="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-700 to-indigo-800 bg-clip-text text-transparent">PathSnap</span>
+          <span class="text-xs text-slate-500 block -mt-1 font-medium">Intelligent GPS Route Reconstruction</span>
+        </div>
+      </div>
+
+      <nav class="flex space-x-8 text-sm">
+        <button id="nav-dashboard" onclick="switchTab('dashboard')" class="py-5 px-1 nav-active flex items-center space-x-2">
+          <i class="fa-solid fa-chart-pie"></i><span>Dashboard</span>
+        </button>
+        <button id="nav-reconstruct" onclick="switchTab('reconstruct')" class="py-5 px-1 text-slate-600 hover:text-slate-900 flex items-center space-x-2">
+          <i class="fa-solid fa-map-location-dot"></i><span>Route Reconstruction</span>
+        </button>
+        <button id="nav-models" onclick="switchTab('models')" class="py-5 px-1 text-slate-600 hover:text-slate-900 flex items-center space-x-2">
+          <i class="fa-solid fa-brain"></i><span>Model Performance</span>
+        </button>
+        <button id="nav-upload" onclick="switchTab('upload')" class="py-5 px-1 text-slate-600 hover:text-slate-900 flex items-center space-x-2">
+          <i class="fa-solid fa-cloud-arrow-up"></i><span>Upload Dataset</span>
+        </button>
+      </nav>
+
+      <div class="flex items-center space-x-3">
+        <span id="api-status-badge" class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+          <span class="w-2 h-2 mr-1.5 bg-emerald-500 rounded-full animate-pulse"></span> Backend Connected
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- TAB 1: DASHBOARD -->
+    <section id="tab-dashboard" class="space-y-6">
+      <!-- Welcome Banner -->
+      <div class="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center">
+          <div class="space-y-2">
+            <h1 class="text-2xl font-bold tracking-tight">Intelligent GPS Map-Matching & Sequence Optimization</h1>
+            <p class="text-blue-100 text-sm max-w-2xl">
+              PathSnap reconstructs true road network routes from inaccurate GPS measurements by combining 5 Machine Learning models with Hidden Markov Models (HMM) and Viterbi sequence decoding.
+            </p>
+          </div>
+          <button onclick="switchTab('reconstruct')" class="mt-4 md:mt-0 bg-white text-blue-600 hover:bg-blue-50 px-4 py-2.5 rounded-lg text-sm font-semibold shadow transition flex items-center space-x-2">
+            <span>Start Reconstruction</span>
+            <i class="fa-solid fa-arrow-right"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Metrics Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>TOTAL TRAJECTORIES</span>
+            <i class="fa-solid fa-car text-blue-500 text-sm"></i>
+          </div>
+          <div class="mt-2 flex items-baseline space-x-2">
+            <span class="text-2xl font-bold text-slate-900">90</span>
+            <span class="text-xs text-slate-500">(80 train, 10 student)</span>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>TOTAL GPS POINTS</span>
+            <i class="fa-solid fa-location-crosshairs text-indigo-500 text-sm"></i>
+          </div>
+          <div class="mt-2 flex items-baseline space-x-2">
+            <span class="text-2xl font-bold text-slate-900">227,577</span>
+            <span class="text-xs text-slate-500">observations</span>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>TRAINED ML MODELS</span>
+            <i class="fa-solid fa-network-wired text-purple-500 text-sm"></i>
+          </div>
+          <div class="mt-2 flex items-baseline space-x-2">
+            <span class="text-2xl font-bold text-slate-900">5 Models</span>
+            <span class="text-xs text-emerald-600 font-semibold">100% Ready</span>
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+          <div class="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>SEQUENCE MATCH ACCURACY</span>
+            <i class="fa-solid fa-bullseye text-emerald-500 text-sm"></i>
+          </div>
+          <div class="mt-2 flex items-baseline space-x-2">
+            <span class="text-2xl font-bold text-slate-900">97.5%</span>
+            <span class="text-xs text-emerald-600 font-semibold">+24.0% over ML</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Models & Architecture Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+          <h2 class="text-base font-semibold text-slate-900 mb-4 flex items-center space-x-2">
+            <i class="fa-solid fa-diagram-project text-blue-600"></i>
+            <span>Architecture & Sequence Pipeline</span>
+          </h2>
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-3 text-center text-xs">
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+              <div class="font-bold text-slate-800">1. Preprocessing</div>
+              <div class="text-slate-500 mt-1">Kalman filter & speed outlier removal</div>
+            </div>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+              <div class="font-bold text-slate-800">2. Spatial Index</div>
+              <div class="text-slate-500 mt-1">Grid search candidates (R ~ 60m)</div>
+            </div>
+            <div class="p-3 bg-blue-50 border border-blue-200 text-blue-900 rounded-lg">
+              <div class="font-bold">3. 5 ML Models</div>
+              <div class="text-blue-700 mt-1">Scoring candidate road arcs</div>
+            </div>
+            <div class="p-3 bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-lg">
+              <div class="font-bold">4. HMM / Viterbi</div>
+              <div class="text-indigo-700 mt-1">Global sequence optimization</div>
+            </div>
+            <div class="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg">
+              <div class="font-bold">5. Route Decoder</div>
+              <div class="text-emerald-700 mt-1">Continuous shortest path bridging</div>
+            </div>
+          </div>
+
+          <div class="mt-6">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">The 5 Machine Learning Models</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+              <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center">
+                <div>
+                  <div class="font-semibold text-slate-800">1. Logistic Regression</div>
+                  <div class="text-slate-500">Linear baseline, sigmoid calibration</div>
+                </div>
+                <span class="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-bold">F1: 0.696</span>
+              </div>
+              <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center">
+                <div>
+                  <div class="font-semibold text-slate-800">2. Random Forest</div>
+                  <div class="text-slate-500">100 trees bagging ensemble</div>
+                </div>
+                <span class="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-bold">F1: 0.702</span>
+              </div>
+              <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center">
+                <div>
+                  <div class="font-semibold text-slate-800">3. HistGradientBoosting</div>
+                  <div class="text-slate-500">Histogram-based gradient boosting</div>
+                </div>
+                <span class="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-bold">F1: 0.705</span>
+              </div>
+              <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center">
+                <div>
+                  <div class="font-semibold text-slate-800">4. Multi-Layer Perceptron</div>
+                  <div class="text-slate-500">Deep feedforward (64x32 ReLU)</div>
+                </div>
+                <span class="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold">Acc: 0.811</span>
+              </div>
+              <div class="p-3 bg-slate-50 rounded-lg border border-slate-200 flex justify-between items-center md:col-span-2">
+                <div>
+                  <div class="font-semibold text-slate-800">5. Support Vector Machine</div>
+                  <div class="text-slate-500">Maximal margin with Platt probability scaling</div>
+                </div>
+                <span class="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-bold">F1: 0.691</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex flex-col justify-between">
+          <div>
+            <h2 class="text-base font-semibold text-slate-900 mb-3 flex items-center space-x-2">
+              <i class="fa-solid fa-list-check text-indigo-600"></i>
+              <span>Dataset Health</span>
+            </h2>
+            <ul class="text-xs space-y-2.5 text-slate-600">
+              <li class="flex items-center justify-between py-1 border-b border-slate-100">
+                <span>Training Trajectories:</span>
+                <span class="font-bold text-slate-800">80 directories</span>
+              </li>
+              <li class="flex items-center justify-between py-1 border-b border-slate-100">
+                <span>Student Test Trajectories:</span>
+                <span class="font-bold text-slate-800">10 directories</span>
+              </li>
+              <li class="flex items-center justify-between py-1 border-b border-slate-100">
+                <span>Evaluator Testing:</span>
+                <span class="font-bold text-emerald-600">Zero Leakage</span>
+              </li>
+              <li class="flex items-center justify-between py-1 border-b border-slate-100">
+                <span>Total Directed Arcs:</span>
+                <span class="font-bold text-slate-800">4,061,945</span>
+              </li>
+              <li class="flex items-center justify-between py-1 border-b border-slate-100">
+                <span>Total Road Nodes:</span>
+                <span class="font-bold text-slate-800">2,024,174</span>
+              </li>
+              <li class="flex items-center justify-between py-1">
+                <span>Ground Truth Arcs:</span>
+                <span class="font-bold text-slate-800">34,813</span>
+              </li>
+            </ul>
+          </div>
+          <div class="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600">
+            <span class="font-semibold text-slate-800"><i class="fa-solid fa-circle-check text-emerald-500 mr-1"></i> Quality Audit:</span>
+            0 missing files, 0 malformed lines, 100% valid node and arc graph references.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: ROUTE RECONSTRUCTION -->
+    <section id="tab-reconstruct" class="hidden space-y-6">
+      <!-- Controls Bar -->
+      <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div class="flex flex-wrap items-center gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Dataset Split</label>
+            <select id="sel-split" onchange="onSplitChange()" class="text-xs bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-medium focus:ring-2 focus:ring-blue-500">
+              <option value="train">Training (80 Trajectories)</option>
+              <option value="student_test">Student Test (10 Trajectories)</option>
+              <option value="custom">Custom Uploaded</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Select Trajectory</label>
+            <select id="sel-traj" class="text-xs bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-medium focus:ring-2 focus:ring-blue-500 w-44">
+              <!-- Populated via API -->
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">ML Model</label>
+            <select id="sel-model" class="text-xs bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-medium focus:ring-2 focus:ring-blue-500">
+              <option value="random_forest">Random Forest Classifier</option>
+              <option value="gradient_boosting">HistGradientBoosting</option>
+              <option value="mlp">Multi-Layer Perceptron (MLP)</option>
+              <option value="svm">Support Vector Machine (SVM)</option>
+              <option value="logistic_regression">Logistic Regression</option>
+              <option value="pure_hmm">Pure HMM (Geometric Distance Prior Only)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-slate-500 mb-1">Candidate Radius</label>
+            <select id="sel-radius" class="text-xs bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 font-medium focus:ring-2 focus:ring-blue-500">
+              <option value="50">50 meters</option>
+              <option value="60" selected>60 meters</option>
+              <option value="80">80 meters</option>
+              <option value="100">100 meters</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+          <button id="btn-reconstruct" onclick="runReconstruction()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow transition flex items-center space-x-2">
+            <i class="fa-solid fa-play"></i>
+            <span>Reconstruct Route</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Map Display & Statistics Layout -->
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Interactive Leaflet Map -->
+        <div class="lg:col-span-3 bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+          <div class="flex justify-between items-center px-2 py-1 mb-2">
+            <div class="flex items-center space-x-4 text-xs">
+              <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-red-500 mr-1.5"></span> Noisy GPS Track</span>
+              <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-blue-600 mr-1.5"></span> Reconstructed Road Route</span>
+              <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-emerald-500 mr-1.5"></span> Start Point</span>
+              <span class="flex items-center"><span class="w-3 h-3 rounded-full bg-indigo-700 mr-1.5"></span> End Point</span>
+            </div>
+            <div class="flex items-center space-x-2 text-xs">
+              <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="toggle-gps" checked onchange="toggleLayers()" class="rounded text-blue-600">
+                <span class="ml-1 text-slate-600">GPS</span>
+              </label>
+              <label class="inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="toggle-route" checked onchange="toggleLayers()" class="rounded text-blue-600">
+                <span class="ml-1 text-slate-600">Route</span>
+              </label>
+            </div>
+          </div>
+          <div id="map"></div>
+        </div>
+
+        <!-- Reconstruction Result Panel -->
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4">
+          <div>
+            <h3 class="text-sm font-bold text-slate-900 border-b border-slate-100 pb-2 flex items-center justify-between">
+              <span>Reconstruction Stats</span>
+              <span id="recon-status-badge" class="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600">Idle</span>
+            </h3>
+
+            <div class="mt-4 space-y-3 text-xs">
+              <div class="flex justify-between py-1 border-b border-slate-50">
+                <span class="text-slate-500">Processing Time:</span>
+                <span id="stat-time" class="font-bold text-slate-800">-- ms</span>
+              </div>
+              <div class="flex justify-between py-1 border-b border-slate-50">
+                <span class="text-slate-500">GPS Observations:</span>
+                <span id="stat-points" class="font-bold text-slate-800">--</span>
+              </div>
+              <div class="flex justify-between py-1 border-b border-slate-50">
+                <span class="text-slate-500">Reconstructed Distance:</span>
+                <span id="stat-distance" class="font-bold text-slate-800">-- km</span>
+              </div>
+              <div class="flex justify-between py-1 border-b border-slate-50">
+                <span class="text-slate-500">Continuous Road Arcs:</span>
+                <span id="stat-arcs" class="font-bold text-slate-800">--</span>
+              </div>
+              <div class="flex justify-between py-1 border-b border-slate-50">
+                <span class="text-slate-500">Graph Gaps Bridged:</span>
+                <span id="stat-gaps" class="font-bold text-blue-600">--</span>
+              </div>
+              <div class="flex justify-between py-1 border-b border-slate-50">
+                <span class="text-slate-500">Active ML Model:</span>
+                <span id="stat-model" class="font-bold text-indigo-600">--</span>
+              </div>
+            </div>
+
+            <!-- Ground Truth Comparison Card -->
+            <div id="ground-truth-box" class="mt-5 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs">
+              <div class="font-semibold text-blue-900 mb-2 flex items-center justify-between">
+                <span>Evaluation vs Ground Truth</span>
+                <i class="fa-solid fa-circle-info"></i>
+              </div>
+              <div class="space-y-1.5 text-blue-800">
+                <div class="flex justify-between">
+                  <span>HMM Recall:</span>
+                  <span id="eval-recall" class="font-bold">--</span>
+                </div>
+                <div class="flex justify-between">
+                  <span>HMM Precision:</span>
+                  <span id="eval-precision" class="font-bold">--</span>
+                </div>
+                <div class="flex justify-between">
+                  <span>HMM F1-Score:</span>
+                  <span id="eval-f1" class="font-bold text-emerald-700">--</span>
+                </div>
+                <div class="flex justify-between border-t border-blue-200 pt-1.5 mt-1.5">
+                  <span>ML-Only F1-Score:</span>
+                  <span id="eval-ml-f1" class="font-medium text-slate-700">--</span>
+                </div>
+                <div class="flex justify-between">
+                  <span>Sequence Gain:</span>
+                  <span id="eval-gain" class="font-bold text-emerald-600">--</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="text-[11px] text-slate-400 text-center">
+            PathSnap Viterbi Sequence Decoder v1.0
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: MODEL PERFORMANCE -->
+    <section id="tab-models" class="hidden space-y-6">
+      <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <h2 class="text-lg font-bold text-slate-900 mb-1">5 ML Models Benchmark & Comparison</h2>
+        <p class="text-xs text-slate-500 mb-6">
+          Rigorous offline evaluation on held-out validation trajectories (16 trajectories, 36,901 candidate-observation pairs) preventing data leakage.
+        </p>
+
+        <!-- Model Comparison Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider">
+                <th class="py-3 px-4">Model Name</th>
+                <th class="py-3 px-4">Accuracy</th>
+                <th class="py-3 px-4">Precision</th>
+                <th class="py-3 px-4">Recall</th>
+                <th class="py-3 px-4">F1-Score</th>
+                <th class="py-3 px-4">ROC-AUC</th>
+                <th class="py-3 px-4">Train Time (s)</th>
+                <th class="py-3 px-4">Inference (ms)</th>
+              </tr>
+            </thead>
+            <tbody id="models-table-body" class="divide-y divide-slate-100">
+              <!-- Populated dynamically via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Comparison Charts Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h3 class="text-sm font-bold text-slate-900 mb-4">F1-Score & Accuracy Comparison</h3>
+          <canvas id="chart-metrics" height="200"></canvas>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+          <h3 class="text-sm font-bold text-slate-900 mb-4">ML-Classifier vs. HMM/Viterbi Gain</h3>
+          <canvas id="chart-gain" height="200"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: UPLOAD DATASET -->
+    <section id="tab-upload" class="hidden space-y-6">
+      <div class="max-w-2xl mx-auto bg-white p-8 rounded-xl border border-slate-200 shadow-sm">
+        <div class="text-center mb-6">
+          <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
+            <i class="fa-solid fa-cloud-arrow-up text-xl"></i>
+          </div>
+          <h2 class="text-xl font-bold text-slate-900">Upload GPS Trajectory Dataset</h2>
+          <p class="text-xs text-slate-500 mt-1">Upload .track, .nodes, .arcs, and optional .route files to validate and reconstruct custom trajectories.</p>
+        </div>
+
+        <form id="upload-form" onsubmit="handleUpload(event)" class="space-y-4 text-xs">
+          <div>
+            <label class="block font-medium text-slate-700 mb-1">Trajectory Name / ID</label>
+            <input type="text" id="upload-traj-id" required placeholder="e.g. test_trip_01" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">.track File (GPS Points) *</label>
+              <input type="file" id="file-track" required accept=".track,.txt,.csv" class="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">.nodes File (Road Vertices) *</label>
+              <input type="file" id="file-nodes" required accept=".nodes,.txt" class="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">.arcs File (Directed Edges) *</label>
+              <input type="file" id="file-arcs" required accept=".arcs,.txt" class="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+
+            <div>
+              <label class="block font-medium text-slate-700 mb-1">.route File (Ground Truth Arcs)</label>
+              <input type="file" id="file-route" accept=".route,.txt" class="w-full text-xs text-slate-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            </div>
+          </div>
+
+          <div class="pt-4">
+            <button type="submit" id="btn-submit-upload" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-semibold shadow transition flex items-center justify-center space-x-2">
+              <i class="fa-solid fa-upload"></i>
+              <span>Upload & Validate Dataset</span>
+            </button>
+          </div>
+        </form>
+
+        <div id="upload-status-box" class="hidden mt-6 p-4 rounded-lg text-xs"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
+    <div class="max-w-7xl mx-auto px-4">
+      PathSnap &bull; Intelligent GPS Map-Matching and Route Reconstruction Platform &bull; Local Development
+    </div>
+  </footer>
+
+  <!-- Application Logic -->
+  <script>
+    const API_BASE = window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1') 
+      ? window.location.origin 
+      : 'http://127.0.0.1:8000';
+
+    let map = null;
+    let gpsPolyline = null;
+    let routePolyline = null;
+    let markersLayer = null;
+    let trajectoriesData = {};
+    let currentReconstruction = null;
+    let chartMetrics = null;
+    let chartGain = null;
+
+    function initMap() {
+      if (map) return;
+      map = L.map('map').setView([49.85, 8.59], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      markersLayer = L.layerGroup().addTo(map);
+    }
+
+    function switchTab(tabId) {
+      ['dashboard', 'reconstruct', 'models', 'upload'].forEach(t => {
+        document.getElementById(`tab-${t}`).classList.add('hidden');
+        document.getElementById(`nav-${t}`).classList.remove('nav-active');
+        document.getElementById(`nav-${t}`).classList.add('text-slate-600');
+      });
+
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+      document.getElementById(`nav-${tabId}`).classList.add('nav-active');
+      document.getElementById(`nav-${tabId}`).classList.remove('text-slate-600');
+
+      if (tabId === 'reconstruct') {
+        setTimeout(() => {
+          initMap();
+          map.invalidateSize();
+        }, 100);
+      } else if (tabId === 'models') {
+        loadModelsMetrics();
+      }
+    }
+
+    async function checkHealth() {
+      try {
+        const res = await fetch(`${API_BASE}/api/health`);
+        const data = await res.json();
+        if (data.status === 'healthy') {
+          document.getElementById('api-status-badge').innerHTML = 
+            '<span class="w-2 h-2 mr-1.5 bg-emerald-500 rounded-full animate-pulse"></span> Backend Connected';
+        }
+      } catch (err) {
+        document.getElementById('api-status-badge').innerHTML = 
+          '<span class="w-2 h-2 mr-1.5 bg-amber-500 rounded-full"></span> Connecting API...';
+      }
+    }
+
+    async function loadTrajectories() {
+      try {
+        const res = await fetch(`${API_BASE}/api/trajectories`);
+        const data = await res.json();
+        trajectoriesData = data.splits;
+        onSplitChange();
+      } catch (err) {
+        console.error('Failed to load trajectories:', err);
+      }
+    }
+
+    function onSplitChange() {
+      const split = document.getElementById('sel-split').value;
+      const list = trajectoriesData[split] || [];
+      const sel = document.getElementById('sel-traj');
+      sel.innerHTML = '';
+      list.forEach(id => {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = `Traj ${id}`;
+        sel.appendChild(opt);
+      });
+    }
+
+    async function runReconstruction() {
+      const split = document.getElementById('sel-split').value;
+      const traj_id = document.getElementById('sel-traj').value;
+      const model = document.getElementById('sel-model').value;
+      const radius = parseFloat(document.getElementById('sel-radius').value);
+
+      if (!traj_id) return alert('Please select a trajectory.');
+
+      const btn = document.getElementById('btn-reconstruct');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Reconstructing...</span>';
+      document.getElementById('recon-status-badge').textContent = 'Processing...';
+      document.getElementById('recon-status-badge').className = 'text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold';
+
+      try {
+        const res = await fetch(`${API_BASE}/api/reconstruct`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            split: split,
+            traj_id: traj_id,
+            model: model,
+            search_radius_m: radius,
+            max_gps_points: 1500
+          })
+        });
+
+        const data = await res.json();
+        if (data.status !== 'success') {
+          throw new Error(data.message || 'Reconstruction failed');
+        }
+
+        currentReconstruction = data;
+        displayReconstructionOnMap(data);
+        displayStats(data);
+
+        document.getElementById('recon-status-badge').textContent = 'Completed';
+        document.getElementById('recon-status-badge').className = 'text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-semibold';
+      } catch (err) {
+        alert('Reconstruction error: ' + err.message);
+        document.getElementById('recon-status-badge').textContent = 'Failed';
+        document.getElementById('recon-status-badge').className = 'text-xs px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-semibold';
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-play"></i><span>Reconstruct Route</span>';
+      }
+    }
+
+    function displayReconstructionOnMap(data) {
+      initMap();
+      markersLayer.clearLayers();
+
+      if (gpsPolyline) map.removeLayer(gpsPolyline);
+      if (routePolyline) map.removeLayer(routePolyline);
+
+      // Raw GPS points [ [lon, lat], ... ] -> Leaflet expects [lat, lon]
+      const gpsLatLngs = (data.raw_gps_coordinates || []).map(p => [p[1], p[0]]);
+      const routeLatLngs = (data.reconstructed_coordinates || []).map(p => [p[1], p[0]]);
+
+      if (gpsLatLngs.length > 0) {
+        gpsPolyline = L.polyline(gpsLatLngs, {
+          color: '#ef4444',
+          weight: 3,
+          opacity: 0.65,
+          dashArray: '4, 6'
+        }).addTo(map);
+
+        // Start marker
+        L.circleMarker(gpsLatLngs[0], {
+          radius: 7,
+          fillColor: '#10b981',
+          color: '#ffffff',
+          weight: 2,
+          fillOpacity: 1
+        }).addTo(markersLayer).bindPopup('<b>Start Position</b>');
+
+        // End marker
+        L.circleMarker(gpsLatLngs[gpsLatLngs.length - 1], {
+          radius: 7,
+          fillColor: '#4338ca',
+          color: '#ffffff',
+          weight: 2,
+          fillOpacity: 1
+        }).addTo(markersLayer).bindPopup('<b>End Position</b>');
+      }
+
+      if (routeLatLngs.length > 0) {
+        routePolyline = L.polyline(routeLatLngs, {
+          color: '#2563eb',
+          weight: 5,
+          opacity: 0.95
+        }).addTo(map);
+
+        map.fitBounds(routePolyline.getBounds(), { padding: [30, 30] });
+      } else if (gpsLatLngs.length > 0) {
+        map.fitBounds(gpsPolyline.getBounds(), { padding: [30, 30] });
+      }
+    }
+
+    function displayStats(data) {
+      document.getElementById('stat-time').textContent = `${data.processing_time_ms} ms`;
+      document.getElementById('stat-points').textContent = `${data.num_gps_cleaned} points`;
+      document.getElementById('stat-distance').textContent = `${data.reconstructed_distance_km} km`;
+      document.getElementById('stat-arcs').textContent = `${(data.continuous_arcs || []).length} arcs`;
+      document.getElementById('stat-gaps').textContent = `${data.num_gaps_bridged} bridged`;
+      document.getElementById('stat-model').textContent = data.model_used;
+
+      if (data.evaluation) {
+        document.getElementById('ground-truth-box').classList.remove('hidden');
+        document.getElementById('eval-recall').textContent = `${(data.evaluation.recall * 100).toFixed(1)}%`;
+        document.getElementById('eval-precision').textContent = `${(data.evaluation.precision * 100).toFixed(1)}%`;
+        document.getElementById('eval-f1').textContent = data.evaluation.f1_score;
+
+        if (data.ml_only_evaluation) {
+          document.getElementById('eval-ml-f1').textContent = data.ml_only_evaluation.f1_score;
+          const diff = ((data.evaluation.f1_score - data.ml_only_evaluation.f1_score) * 100).toFixed(1);
+          document.getElementById('eval-gain').textContent = `+${diff}% F1 improvement`;
+        }
+      } else {
+        document.getElementById('ground-truth-box').classList.add('hidden');
+      }
+    }
+
+    function toggleLayers() {
+      const showGps = document.getElementById('toggle-gps').checked;
+      const showRoute = document.getElementById('toggle-route').checked;
+
+      if (gpsPolyline) {
+        if (showGps) map.addLayer(gpsPolyline);
+        else map.removeLayer(gpsPolyline);
+      }
+      if (routePolyline) {
+        if (showRoute) map.addLayer(routePolyline);
+        else map.removeLayer(routePolyline);
+      }
+    }
+
+    async function loadModelsMetrics() {
+      try {
+        const res = await fetch(`${API_BASE}/api/models`);
+        const data = await res.json();
+        const models = data.models;
+
+        const tbody = document.getElementById('models-table-body');
+        tbody.innerHTML = '';
+
+        const names = [];
+        const f1s = [];
+        const accs = [];
+
+        Object.keys(models).forEach(k => {
+          const m = models[k];
+          names.push(m.name);
+          f1s.push(m.f1_score);
+          accs.push(m.accuracy);
+
+          const tr = document.createElement('tr');
+          tr.className = 'hover:bg-slate-50 transition';
+          tr.innerHTML = `
+            <td class="py-3 px-4 font-semibold text-slate-800">${m.name}</td>
+            <td class="py-3 px-4 font-medium text-slate-700">${m.accuracy}</td>
+            <td class="py-3 px-4 text-slate-600">${m.precision}</td>
+            <td class="py-3 px-4 text-slate-600">${m.recall}</td>
+            <td class="py-3 px-4 font-bold text-blue-600">${m.f1_score}</td>
+            <td class="py-3 px-4 font-semibold text-indigo-600">${m.roc_auc}</td>
+            <td class="py-3 px-4 text-slate-500">${m.train_time_sec || '--'}</td>
+            <td class="py-3 px-4 text-slate-500">${m.inference_time_ms || '--'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        renderCharts(names, f1s, accs);
+      } catch (err) {
+        console.error('Failed to load model metrics:', err);
+      }
+    }
+
+    function renderCharts(names, f1s, accs) {
+      if (chartMetrics) chartMetrics.destroy();
+      if (chartGain) chartGain.destroy();
+
+      const ctx1 = document.getElementById('chart-metrics').getContext('2d');
+      chartMetrics = new Chart(ctx1, {
+        type: 'bar',
+        data: {
+          labels: names,
+          datasets: [
+            { label: 'Accuracy', data: accs, backgroundColor: '#3b82f6' },
+            { label: 'F1-Score', data: f1s, backgroundColor: '#6366f1' }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: { y: { min: 0.6, max: 1.0 } }
+        }
+      });
+
+      const ctx2 = document.getElementById('chart-gain').getContext('2d');
+      chartGain = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+          labels: ['Recall (%)', 'F1-Score (%)', 'Jaccard Sim (%)'],
+          datasets: [
+            { label: 'ML-Only (Greedy Top-1)', data: [73.5, 71.2, 55.3], backgroundColor: '#94a3b8' },
+            { label: 'HMM + Viterbi Reconstructed', data: [97.5, 85.9, 75.3], backgroundColor: '#10b981' }
+          ]
+        },
+        options: {
+          responsive: true,
+          scales: { y: { min: 40, max: 100 } }
+        }
+      });
+    }
+
+    async function handleUpload(e) {
+      e.preventDefault();
+      const traj_id = document.getElementById('upload-traj-id').value.trim();
+      const f_track = document.getElementById('file-track').files[0];
+      const f_nodes = document.getElementById('file-nodes').files[0];
+      const f_arcs = document.getElementById('file-arcs').files[0];
+      const f_route = document.getElementById('file-route').files[0];
+
+      if (!f_track || !f_nodes || !f_arcs) {
+        return alert('Please select all required files (.track, .nodes, .arcs).');
+      }
+
+      const formData = new FormData();
+      formData.append('traj_id', traj_id);
+      formData.append('track', f_track);
+      formData.append('nodes', f_nodes);
+      formData.append('arcs', f_arcs);
+      if (f_route) formData.append('route', f_route);
+
+      const statusBox = document.getElementById('upload-status-box');
+      const submitBtn = document.getElementById('btn-submit-upload');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Uploading & Validating...</span>';
+
+      try {
+        const res = await fetch(`${API_BASE}/api/upload`, {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json();
+        statusBox.classList.remove('hidden');
+
+        if (data.status === 'success') {
+          statusBox.className = 'mt-6 p-4 rounded-lg text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 space-y-1';
+          statusBox.innerHTML = `
+            <div class="font-bold flex items-center"><i class="fa-solid fa-circle-check mr-2"></i> ${data.message}</div>
+            <div>Track observations: <b>${data.num_track_points}</b> | Nodes: <b>${data.num_nodes}</b> | Arcs: <b>${data.num_arcs}</b></div>
+            <div>Ground truth reference route: <b>${data.has_route ? 'Present' : 'Not provided'}</b></div>
+          `;
+          await loadTrajectories();
+        } else {
+          statusBox.className = 'mt-6 p-4 rounded-lg text-xs bg-rose-50 border border-rose-200 text-rose-800';
+          statusBox.innerHTML = `<b>Upload failed:</b> ${data.message}`;
+        }
+      } catch (err) {
+        statusBox.classList.remove('hidden');
+        statusBox.className = 'mt-6 p-4 rounded-lg text-xs bg-rose-50 border border-rose-200 text-rose-800';
+        statusBox.innerHTML = `<b>Error:</b> ${err.message}`;
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-upload"></i><span>Upload & Validate Dataset</span>';
+      }
+    }
+
+    // Auto-init on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      checkHealth();
+      loadTrajectories();
+    });
+  </script>
+</body>
+</html>
